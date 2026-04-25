@@ -10,8 +10,8 @@ import { Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (s: Record<string, unknown>) => ({
-    mode: (s.mode as "signup" | "signin") ?? "signin",
+  validateSearch: (s: Record<string, unknown>): { mode?: "signup" | "signin" } => ({
+    mode: s.mode === "signup" ? "signup" : s.mode === "signin" ? "signin" : undefined,
   }),
   component: LoginPage,
   head: () => ({ meta: [{ title: "Sign in — Studyo" }] }),
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const { mode: initialMode } = Route.useSearch();
-  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode ?? "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
