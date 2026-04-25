@@ -28,7 +28,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Loader2, Calendar, BookOpen } from "lucide-react";
+import { Plus, Trash2, Loader2, Calendar, BookOpen, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
 
@@ -54,6 +54,8 @@ function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | "todo" | "in_progress" | "done">("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "low" | "medium" | "high">("all");
+  const [sortBy, setSortBy] = useState<"created" | "priority" | "due">("created");
 
   // form
   const [title, setTitle] = useState("");
@@ -130,7 +132,21 @@ function TasksPage() {
     }
   };
 
-  const visible = tasks.filter((t) => filter === "all" || t.status === filter);
+  const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const visible = tasks
+    .filter((t) => filter === "all" || t.status === filter)
+    .filter((t) => priorityFilter === "all" || t.priority === priorityFilter)
+    .slice()
+    .sort((a, b) => {
+      if (sortBy === "priority") return priorityRank[a.priority] - priorityRank[b.priority];
+      if (sortBy === "due") {
+        if (!a.due_date && !b.due_date) return 0;
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -197,12 +213,38 @@ function TasksPage() {
       </div>
 
       <Tabs value={filter} onValueChange={(v) => setFilter(v as any)} className="mt-6">
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="todo">To do</TabsTrigger>
-          <TabsTrigger value="in_progress">In progress</TabsTrigger>
-          <TabsTrigger value="done">Done</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="todo">To do</TabsTrigger>
+            <TabsTrigger value="in_progress">In progress</TabsTrigger>
+            <TabsTrigger value="done">Done</TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-2">
+            <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as any)}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All priorities</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[160px]">
+                <ArrowUpDown className="mr-2 h-3.5 w-3.5" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created">Newest first</SelectItem>
+                <SelectItem value="priority">Priority</SelectItem>
+                <SelectItem value="due">Due date</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
         <TabsContent value={filter} className="mt-4">
           <div className="rounded-2xl border border-border bg-card">
