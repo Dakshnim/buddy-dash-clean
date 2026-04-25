@@ -1,6 +1,8 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
+import { ProfileProvider } from "@/components/profile-provider";
+import { NotificationsProvider } from "@/components/notifications-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
@@ -83,8 +85,12 @@ function RootComponent() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Outlet />
-        <Toaster richColors position="top-right" />
+        <ProfileProvider>
+          <NotificationsProvider>
+            <Outlet />
+            <Toaster richColors position="top-right" />
+          </NotificationsProvider>
+        </ProfileProvider>
       </AuthProvider>
     </ThemeProvider>
   );

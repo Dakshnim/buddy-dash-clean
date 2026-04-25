@@ -1,0 +1,142 @@
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/auth-provider";
+import { toast } from "sonner";
+
+export type Notification = {
+  id: string;
+  taskId: string;
+  title: string;
+  message: string;
+  type: "overdue" | "soon";
+  dueDate: string;
+  read: boolean;
+  createdAt: number;
+};
+
+type TaskRow = {
+  id: string;
+  title: string;
+  status: string;
+  due_date: string | null;
+  user_id: string;
+};
+
+type Ctx = {
+  notifications: Notification[];
+  unread: number;
+  markAllRead: () => void;
+  clear: () => void;
+};
+
+const NotifCtx = createContext<Ctx>({ notifications: [], unread: 0, markAllRead: () => {}, clear: () => {} });
+
+const STORAGE_KEY = "studyo-notified";
+const SOON_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+
+export function NotificationsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const notifiedRef = useRef<Set<string>>(new Set());
+
+  // Load notified set from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) notifiedRef.current = new Set(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const persistNotified = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...notifiedRef.current]));
+    } catch {}
+  };
+
+  const evaluate = useCallback((task: TaskRow) => {
+    if (!task.due_date || task.status === "done") return;
+    const due = new Date(task.due_date).getTime();
+    const now = Date.now();
+    const diff = due - now;
+
+    let type: "overdue" | "soon" | null = null;
+    if (diff < 0) type = "overdue";
+    else if (diff <= SOON_WINDOW_MS) type = "soon";
+    if (!type) return;
+
+    const key = `${task.id}:${type}`;
+    if (notifiedRef.current.has(key)) return;
+    notifiedRef.current.add(key);
+    persistNotified();
+
+    const message =
+      type === "overdue"
+        ? `Overdue since ${new Date(task.due_date).toLocaleDateString()}`
+        : `Due ${new Date(task.due_date).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}`;
+
+    const n: Notification = {
+      id: `${key}:${now}`,
+      taskId: task.id,
+      title: task.title,
+      message,
+      type,
+      dueDate: task.due_date,
+      read: false,
+      createdAt: now,
+    };
+    setNotifications((cur) => [n, ...cur].slice(0, 50));
+    if (type === "overdue") toast.error(`Overdue: ${task.title}`, { description: message });
+    else toast.warning(`Due soon: ${task.title}`, { description: message });
+  }, []);
+
+  // Periodic scan + realtime subscription
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    const scan = async () => {
+      const { data } = await supabase
+        .from("tasks")
+        .select("id,title,status,due_date,user_id")
+        .neq("status", "done")
+        .not("due_date", "is", null);
+      if (cancelled || !data) return;
+      (data as TaskRow[]).forEach(evaluate);
+    };
+
+    scan();
+    const interval = setInterval(scan, 60_000);
+
+    const channel = supabase
+      .channel("tasks-notifications")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as TaskRow | undefined;
+          if (row) evaluate(row);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user, evaluate]);
+
+  const markAllRead = () => setNotifications((cur) => cur.map((n) => ({ ...n, read: true })));
+  const clear = () => setNotifications([]);
+
+  const unread = notifications.filter((n) => !n.read).length;
+
+  return (
+    <NotifCtx.Provider value={{ notifications, unread, markAllRead, clear }}>
+      {children}
+    </NotifCtx.Provider>
+  );
+}
+
+export const useNotifications = () => useContext(NotifCtx);

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, ListChecks, LogOut, GraduationCap } from "lucide-react";
+import { LayoutDashboard, ListChecks, LogOut, User } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,11 +15,14 @@ import {
 } from "@/components/ui/sidebar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/auth-provider";
+import { useProfile } from "@/components/profile-provider";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 
 const items = [
   { title: "Overview", url: "/dashboard", icon: LayoutDashboard, end: true },
   { title: "Tasks", url: "/dashboard/tasks", icon: ListChecks, end: false },
+  { title: "Profile", url: "/dashboard/profile", icon: User, end: false },
 ];
 
 export function AppSidebar() {
@@ -27,6 +30,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const { profile } = useProfile();
   const navigate = useNavigate();
 
   const isActive = (url: string, end: boolean) =>
@@ -73,17 +77,27 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
-            <GraduationCap className="h-4 w-4" />
-          </div>
+        <Link to="/dashboard/profile" className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-sidebar-accent">
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={profile?.avatar_url ?? undefined} alt={profile?.display_name ?? "You"} />
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+              {(profile?.display_name ?? user?.email ?? "U")
+                .split(/[ @]/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((s) => s[0]?.toUpperCase())
+                .join("")}
+            </AvatarFallback>
+          </Avatar>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user?.user_metadata?.full_name ?? "Student"}</p>
+              <p className="truncate text-sm font-medium">
+                {profile?.display_name ?? "Student"}
+              </p>
               <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
             </div>
           )}
-        </div>
+        </Link>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={signOut} tooltip="Sign out">
