@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, onSnapshot, Timestamp } from "firebase/firestore";
 import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
+import { firestore } from "@/integrations/firebase/client";
 
 export type Notification = {
   id: string;
@@ -19,7 +20,6 @@ type TaskRow = {
   title: string;
   status: string;
   due_date: string | null;
-  user_id: string;
 };
 
 type Ctx = {
@@ -38,6 +38,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const notifiedRef = useRef<Set<string>>(new Set());
+  const lastTasksRef = useRef<TaskRow[]>([]);
 
   // Load notified set from localStorage
   useEffect(() => {
@@ -95,35 +96,37 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     let cancelled = false;
 
-    const scan = async () => {
-      const { data } = await supabase
-        .from("tasks")
-        .select("id,title,status,due_date,user_id")
-        .neq("status", "done")
-        .not("due_date", "is", null);
-      if (cancelled || !data) return;
-      (data as TaskRow[]).forEach(evaluate);
-    };
+    const ref = collection(firestore, "users", user.uid, "tasks");
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (cancelled) return;
+        const rows: TaskRow[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          const due = (data.dueDate as Timestamp | undefined)?.toDate?.() ?? null;
+          return {
+            id: d.id,
+            title: data.title ?? "",
+            status: data.status ?? "todo",
+            due_date: due ? due.toISOString() : null,
+          };
+        });
+        lastTasksRef.current = rows;
+        rows.forEach(evaluate);
+      },
+      () => {}
+    );
 
-    scan();
-    const interval = setInterval(scan, 60_000);
-
-    const channel = supabase
-      .channel("tasks-notifications")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tasks", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          const row = (payload.new ?? payload.old) as TaskRow | undefined;
-          if (row) evaluate(row);
-        }
-      )
-      .subscribe();
+    const interval = setInterval(() => {
+      // Re-evaluate periodically in case "soon" window is reached without changes.
+      if (cancelled) return;
+      lastTasksRef.current.forEach(evaluate);
+    }, 60_000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      unsub();
     };
   }, [user, evaluate]);
 

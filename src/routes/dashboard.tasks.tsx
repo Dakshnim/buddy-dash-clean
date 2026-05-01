@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  Timestamp,
+} from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +42,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2, Loader2, Calendar, BookOpen, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth-provider";
+import { firestore } from "@/integrations/firebase/client";
 
 export const Route = createFileRoute("/dashboard/tasks")({
   component: TasksPage,
@@ -65,20 +77,45 @@ function TasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) toast.error(error.message);
-    setTasks((data as Task[]) ?? []);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    load();
-  }, []);
+    if (!user) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const q = query(
+      collection(firestore, "users", user.uid, "tasks"),
+      orderBy("createdAt", "desc")
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const next: Task[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          const createdAt = (data.createdAt as Timestamp | undefined)?.toDate?.() ?? new Date(0);
+          const due = (data.dueDate as Timestamp | undefined)?.toDate?.() ?? null;
+          return {
+            id: d.id,
+            title: data.title ?? "",
+            description: data.description ?? null,
+            status: (data.status ?? "todo") as Task["status"],
+            priority: (data.priority ?? "medium") as Task["priority"],
+            course: data.course ?? null,
+            due_date: due ? due.toISOString() : null,
+            created_at: createdAt.toISOString(),
+          };
+        });
+        setTasks(next);
+        setLoading(false);
+      },
+      (err) => {
+        toast.error(err.message ?? "Failed to load tasks");
+        setLoading(false);
+      }
+    );
+    return () => unsub();
+  }, [user]);
 
   const reset = () => {
     setTitle("");
@@ -92,43 +129,46 @@ function TasksPage() {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from("tasks").insert({
-      user_id: user.id,
-      title,
-      description: description || null,
-      priority,
-      course: course || null,
-      due_date: dueDate ? new Date(dueDate).toISOString() : null,
-    });
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      const due = dueDate ? Timestamp.fromDate(new Date(dueDate + "T00:00:00")) : null;
+      await addDoc(collection(firestore, "users", user.uid, "tasks"), {
+        title,
+        description: description || null,
+        status: "todo",
+        priority,
+        course: course || null,
+        dueDate: due,
+        createdAt: serverTimestamp(),
+      });
+      toast.success("Task added");
+      reset();
+      setOpen(false);
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to create task");
+    } finally {
+      setSaving(false);
     }
-    toast.success("Task added");
-    reset();
-    setOpen(false);
-    load();
   };
 
   const toggleDone = async (t: Task) => {
     const next = t.status === "done" ? "todo" : "done";
     setTasks((cur) => cur.map((x) => (x.id === t.id ? { ...x, status: next } : x)));
-    const { error } = await supabase.from("tasks").update({ status: next }).eq("id", t.id);
-    if (error) {
-      toast.error(error.message);
-      load();
+    if (!user) return;
+    try {
+      await updateDoc(doc(firestore, "users", user.uid, "tasks", t.id), { status: next });
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to update task");
     }
   };
 
   const remove = async (t: Task) => {
     setTasks((cur) => cur.filter((x) => x.id !== t.id));
-    const { error } = await supabase.from("tasks").delete().eq("id", t.id);
-    if (error) {
-      toast.error(error.message);
-      load();
-    } else {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(firestore, "users", user.uid, "tasks", t.id));
       toast.success("Task deleted");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to delete task");
     }
   };
 

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { firebaseAuth } from "@/integrations/firebase/client";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,19 +37,11 @@ function LoginPage() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { full_name: name },
-          },
-        });
-        if (error) throw error;
+        const cred = await createUserWithEmailAndPassword(firebaseAuth!, email, password);
+        if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() });
         toast.success("Account created! You're signed in.");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        await signInWithEmailAndPassword(firebaseAuth!, email, password);
         toast.success("Welcome back!");
       }
     } catch (err: any) {

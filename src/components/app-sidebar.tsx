@@ -13,7 +13,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { supabase } from "@/integrations/supabase/client";
+import { signOut as firebaseSignOut } from "firebase/auth";
+import { firebaseAuth } from "@/integrations/firebase/client";
 import { useAuth } from "@/components/auth-provider";
 import { useProfile } from "@/components/profile-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,7 +38,7 @@ export function AppSidebar() {
     end ? pathname === url : pathname === url || pathname.startsWith(url + "/");
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    if (firebaseAuth) await firebaseSignOut(firebaseAuth);
     toast.success("Signed out");
     navigate({ to: "/" });
   };

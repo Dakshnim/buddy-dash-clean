@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { updateProfile } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { useAuth } from "@/components/auth-provider";
 import { useProfile } from "@/components/profile-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { firebaseAuth, firestore } from "@/integrations/firebase/client";
 
 export const Route = createFileRoute("/dashboard/profile")({
   component: ProfilePage,
@@ -20,8 +22,6 @@ function ProfilePage() {
   const { profile, refresh } = useProfile();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setName(profile?.display_name ?? "");
@@ -38,39 +38,22 @@ function ProfilePage() {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ display_name: name })
-      .eq("user_id", user.id);
-    setSaving(false);
-    if (error) return toast.error(error.message);
-    await refresh();
-    toast.success("Profile saved");
-  };
-
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-    if (file.size > 5 * 1024 * 1024) return toast.error("Max 5MB");
-    setUploading(true);
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${user.id}/avatar-${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type });
-    if (upErr) {
-      setUploading(false);
-      return toast.error(upErr.message);
+    try {
+      if (firebaseAuth?.currentUser) {
+        await updateProfile(firebaseAuth.currentUser, { displayName: name.trim() || null });
+      }
+      await setDoc(
+        doc(firestore, "profiles", user.uid),
+        { display_name: name.trim() || null },
+        { merge: true }
+      );
+      await refresh();
+      toast.success("Profile saved");
+    } catch (err: any) {
+      toast.error(err.message ?? "Something went wrong");
+    } finally {
+      setSaving(false);
     }
-    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
-    const { error: updErr } = await supabase
-      .from("profiles")
-      .update({ avatar_url: pub.publicUrl })
-      .eq("user_id", user.id);
-    setUploading(false);
-    if (updErr) return toast.error(updErr.message);
-    await refresh();
-    toast.success("Avatar updated");
   };
 
   return (
@@ -86,24 +69,8 @@ function ProfilePage() {
               {initials}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={onFile}
-            />
-            <Button
-              variant="outline"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="gap-2"
-            >
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Change avatar
-            </Button>
-            <p className="mt-2 text-xs text-muted-foreground">PNG, JPG up to 5MB.</p>
+          <div className="text-sm text-muted-foreground">
+            Avatar comes from your Firebase Auth profile photo URL.
           </div>
         </div>
 

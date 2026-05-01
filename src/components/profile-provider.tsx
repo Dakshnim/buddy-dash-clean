@@ -1,10 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "@/components/auth-provider";
+import { firestore } from "@/integrations/firebase/client";
 
 type Profile = {
-  id: string;
-  user_id: string;
   display_name: string | null;
   avatar_url: string | null;
 };
@@ -28,17 +27,37 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from("profiles")
-      .select("id,user_id,display_name,avatar_url")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    setProfile((data as Profile) ?? null);
-    setLoading(false);
+    try {
+      const ref = doc(firestore, "profiles", user.uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        const next: Profile = {
+          display_name: user.displayName ?? null,
+          avatar_url: user.photoURL ?? null,
+        };
+        await setDoc(ref, next, { merge: true });
+        setProfile(next);
+        setLoading(false);
+        return;
+      }
+      const data = snap.data() as Partial<Profile>;
+      setProfile({
+        display_name: data.display_name ?? user.displayName ?? null,
+        avatar_url: data.avatar_url ?? user.photoURL ?? null,
+      });
+      setLoading(false);
+    } catch {
+      // Firestore can temporarily be offline; fall back to auth profile data.
+      setProfile({
+        display_name: user.displayName ?? null,
+        avatar_url: user.photoURL ?? null,
+      });
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return (
