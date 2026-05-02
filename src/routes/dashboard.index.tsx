@@ -81,67 +81,68 @@ function Overview() {
   const name = user?.displayName?.split(" ")[0] ?? "there";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white p-6">
-      
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+    <div className="mx-auto max-w-6xl">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-gray-400">{greeting},</p>
-          <h1 className="text-4xl font-bold text-cyan-400">{name} 👋</h1>
+          <p className="text-sm text-muted-foreground">{greeting},</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
+            {name}.
+          </h1>
         </div>
-        <Button asChild className="bg-cyan-500 hover:bg-cyan-400 text-black">
+        <Button asChild>
           <Link to="/dashboard/tasks">
-            Open Tasks <ArrowRight className="h-4 w-4 ml-1" />
+            Open task manager <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-6 md:grid-cols-4">
-        <StatCard icon={ListChecks} label="Total" value={total} />
-        <StatCard icon={Clock} label="In Progress" value={todo} />
-        <StatCard icon={CheckCircle2} label="Done" value={done} />
-        <StatCard icon={Flame} label="Overdue" value={overdue} />
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon={ListChecks} label="Total tasks" value={total} tint="primary" />
+        <StatCard icon={Clock} label="In progress" value={todo} tint="warning" />
+        <StatCard icon={CheckCircle2} label="Completed" value={done} tint="success" />
+        <StatCard icon={Flame} label="Overdue" value={overdue} tint="destructive" />
       </div>
 
-      {/* Main */}
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        
-        {/* Upcoming */}
-        <div className="lg:col-span-2 bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Upcoming Tasks</h2>
-
-          {loading && <p className="text-gray-400">Loading...</p>}
-
-          {!loading && upcoming.length === 0 && (
-            <p className="text-gray-400">No upcoming tasks</p>
-          )}
-
-          {upcoming.map((t) => (
-            <div key={t.id} className="flex justify-between items-center py-3 border-b border-white/10">
-              <div>
-                <p className="font-medium">{t.title}</p>
-                <p className="text-xs text-gray-400">
-                  {t.course ?? "No course"}
-                  {t.due_date && " • " + new Date(t.due_date).toLocaleDateString()}
-                </p>
+        <div className="rounded-2xl border border-border bg-card p-6 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold">Upcoming</h2>
+            <Link to="/dashboard/tasks" className="text-sm text-primary hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="mt-4 divide-y divide-border">
+            {loading && <p className="py-6 text-sm text-muted-foreground">Loading…</p>}
+            {!loading && upcoming.length === 0 && (
+              <p className="py-6 text-sm text-muted-foreground">
+                Nothing due. Add your first task to get started.
+              </p>
+            )}
+            {upcoming.map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{t.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {t.course ?? "No course"}
+                    {t.due_date && " · " + new Date(t.due_date).toLocaleDateString()}
+                  </p>
+                </div>
+                <PriorityPill priority={t.priority} />
               </div>
-              <PriorityPill priority={t.priority} />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        {/* Side Card */}
-        <div className="bg-gradient-to-br from-cyan-500/20 to-purple-500/20 backdrop-blur border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold">Focus Tip</h2>
-          <p className="text-gray-300 text-sm mt-2">
-            Use 25 min focus + 5 min break (Pomodoro technique).
+        <div className="rounded-2xl border border-border bg-gradient-to-br from-primary/15 to-accent p-6">
+          <h2 className="font-display text-lg font-semibold">Focus tip</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Try the 25/5 Pomodoro method: 25 minutes of deep work, then a 5
+            minute break. Rinse and repeat — your brain will thank you.
           </p>
-          <Button asChild className="mt-4 w-full bg-white text-black">
-            <Link to="/dashboard/tasks">Start Planning</Link>
+          <Button asChild variant="secondary" className="mt-6 w-full">
+            <Link to="/dashboard/tasks">Plan today</Link>
           </Button>
         </div>
-
       </div>
     </div>
   );
@@ -151,28 +152,38 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  tint,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
+  tint: "primary" | "success" | "warning" | "destructive";
 }) {
+  const tintMap: Record<string, string> = {
+    primary: "bg-primary/10 text-primary",
+    success: "bg-success/15 text-success",
+    warning: "bg-warning/20 text-warning-foreground",
+    destructive: "bg-destructive/10 text-destructive",
+  };
   return (
-    <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-5 hover:scale-105 transition">
-      <Icon className="h-6 w-6 text-cyan-400" />
-      <p className="text-gray-400 mt-2">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <div className={`grid h-10 w-10 place-items-center rounded-lg ${tintMap[tint]}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="mt-4 text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 font-display text-3xl font-bold">{value}</p>
     </div>
   );
 }
 
 function PriorityPill({ priority }: { priority: string }) {
   const map: Record<string, string> = {
-    high: "bg-red-500/20 text-red-400",
-    medium: "bg-yellow-500/20 text-yellow-400",
-    low: "bg-gray-500/20 text-gray-300",
+    high: "bg-destructive/10 text-destructive",
+    medium: "bg-warning/20 text-warning-foreground",
+    low: "bg-muted text-muted-foreground",
   };
   return (
-    <span className={`px-3 py-1 rounded-full text-xs ${map[priority] ?? map.low}`}>
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${map[priority] ?? map.low}`}>
       {priority}
     </span>
   );
